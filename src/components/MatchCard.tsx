@@ -9,7 +9,7 @@ import { shortDay } from '../utils/dates';
 import { MARKET_NAME, pickCode, settle } from '../utils/markets';
 import { Crest } from './Crest';
 import { Glass } from './Glass';
-import { Icon, LivePulse, ResultBadge, TipBadge } from './ui';
+import { Icon, LivePulse, OddPill, ResultBadge, TipBadge } from './ui';
 
 /** The standard match row: status, both teams, our estimate and the pick. */
 export function MatchCard({ m, showDay }: { m: Match; showDay?: boolean }) {
@@ -106,6 +106,7 @@ export function MatchCard({ m, showDay }: { m: Match; showDay?: boolean }) {
               <Text style={[s.pickLine, { flex: 1 }]} numberOfLines={1}>
                 {MARKET_NAME[m.pick.market]}
               </Text>
+              {m.estimate === 'pending' ? null : <OddPill odds={m.odds} p={m.pick.p} />}
             </View>
           )}
         </View>

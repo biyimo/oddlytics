@@ -4,7 +4,7 @@ import { Crest } from '../../components/Crest';
 import { MatchCard } from '../../components/MatchCard';
 import { EmptyDay } from '../../components/MatchLists';
 import { Screen } from '../../components/Screen';
-import { Button, Icon, Notice, ResultBadge, SectionHead, TipBadge } from '../../components/ui';
+import { Button, Icon, Notice, OddPill, ResultBadge, SectionHead, TipBadge } from '../../components/ui';
 import { BRAND } from '../../config/brand';
 import { TEASER } from '../../data/sample/trackRecord';
 import { useApp } from '../../state/AppProvider';
@@ -51,6 +51,7 @@ function FeatureCard({ m, rank }: { m: Match; rank: number }) {
             <Text style={[s.featurePickText, { marginTop: 0, flex: 1 }]} numberOfLines={2}>
               {MARKET_NAME[m.pick.market]}
             </Text>
+            <OddPill odds={m.odds} p={m.pick.p} size="md" />
           </View>
         </View>
         <Text style={[s.featurePct, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
@@ -246,6 +247,7 @@ function Slip() {
                         MARKET_NAME[m.pick.market]
                       )}
                     </Text>
+                    {isLocked ? null : <OddPill odds={m.odds} p={m.pick.p} />}
                   </View>
                   <View style={[s.row, { marginTop: 8, gap: 4 }]}>
                     {hasConsensus ? (

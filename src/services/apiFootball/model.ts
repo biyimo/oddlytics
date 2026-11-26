@@ -115,8 +115,8 @@ export function candidates(x: [number, number, number], g: GoalModel): Candidate
  * instead of always landing on the safest double chance.
  */
 const BAR: Record<string, number> = {
-  '1': 47,
-  '2': 45,
+  '1': 42,
+  '2': 40,
   X: 40,
   '1X': 70,
   X2: 70,
@@ -155,8 +155,9 @@ export function choosePick(
   underOver?: string | null,
 ): Pick {
   const backed = new Set([adviceCode(advice, homeName, awayName), underOverCode(underOver)].filter(Boolean));
-  const scored = all
-    .filter((c) => c.p <= 92)
+  /* Nothing under 55% is tipped while something else clears it: a straight win at 48% isn't a tip. */
+  const usable = all.filter((c) => c.p <= 92 && c.p >= 55);
+  const scored = (usable.length ? usable : all.filter((c) => c.p <= 92))
     .map((c) => ({ c, score: c.p - (BAR[c.code] ?? 70) + (backed.has(c.code) ? 4 : 0) }))
     .sort((a, b) => b.score - a.score || b.c.p - a.c.p);
   const best = scored[0]?.c ?? all[3];
