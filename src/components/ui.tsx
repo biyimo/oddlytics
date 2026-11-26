@@ -236,6 +236,34 @@ export function Flag({ country, big }: { country: string; big?: boolean }) {
   );
 }
 
+/**
+ * Decimal odd for a pick. Shows the bookmaker price (median across books) when we have one;
+ * otherwise the fair odd from our probability (100 / p), marked "fair" so it isn't mistaken for a price.
+ */
+export function OddPill({ odds, p, size = 'sm' }: { odds?: number; p: number; size?: 'sm' | 'md' }) {
+  const value = odds ?? Math.max(1.01, Math.round((100 / Math.max(1, p)) * 100) / 100);
+  const fs = size === 'md' ? 14 : 12;
+  return (
+    <View
+      accessibilityLabel={odds ? `Odds ${value.toFixed(2)}` : `Fair odds ${value.toFixed(2)}`}
+      style={{
+        height: size === 'md' ? 30 : 22,
+        paddingHorizontal: 8,
+        borderRadius: size === 'md' ? 10 : 6,
+        borderWidth: 1,
+        borderColor: odds ? 'rgba(241,200,121,0.45)' : 'rgba(167,169,177,0.3)',
+        backgroundColor: odds ? '#2E2614' : 'transparent',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+      }}
+    >
+      {odds ? null : <Text style={{ color: '#A7A9B1', fontSize: fs - 2, fontWeight: '600' }}>fair</Text>}
+      <Text style={{ color: odds ? '#F1C879' : '#D1D2D8', fontWeight: '800', fontSize: fs }}>{value.toFixed(2)}</Text>
+    </View>
+  );
+}
+
 /** Betting code pill (1, X2, BTTS, HS2+ …). Shown on every pick so users learn the terms. */
 export function TipBadge({ code, size = 'sm' }: { code: string; size?: 'sm' | 'md' | 'lg' }) {
   const dims =

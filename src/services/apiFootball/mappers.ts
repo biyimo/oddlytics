@@ -527,10 +527,11 @@ export function h2hOf(p: MiniPrediction, homeId: number) {
   return { home, draws, away, games: games.length, fromYear: Math.min(...years), toYear: Math.max(...years) };
 }
 
-/** Decimal prices keyed by our tip codes. Takes each market from the first bookmaker that offers it. */
+/**
+ * Decimal prices keyed by our tip codes. Each price is the median across every
+ * bookmaker API-Football lists for the match, so one outlier book can't skew it.
+ */
 export function oddsOf(list: RawOdds[]): { odds: Record<string, number>; bookmaker?: string } {
-  const out: Record<string, number> = {};
-  const used: string[] = [];
   const MAP: [string, string, string][] = [
     ['Match Winner', 'Home', '1'],
     ['Match Winner', 'Draw', 'X'],
@@ -549,17 +550,23 @@ export function oddsOf(list: RawOdds[]): { odds: Record<string, number>; bookmak
     ['Total - Away', 'Over 0.5', 'AS'],
     ['Total - Away', 'Over 1.5', 'AS2+'],
   ];
-  for (const book of list[0]?.bookmakers ?? []) {
+  const all: Record<string, number[]> = {};
+  const books = list[0]?.bookmakers ?? [];
+  for (const book of books) {
     for (const [bet, value, code] of MAP) {
-      if (out[code]) continue;
       const o = num(book.bets.find((b) => b.name === bet)?.values.find((v) => v.value === value)?.odd);
-      if (o) {
-        out[code] = o;
-        if (!used.includes(book.name)) used.push(book.name);
-      }
+      if (o && o > 1) (all[code] ??= []).push(o);
     }
   }
-  return { odds: out, bookmaker: used.slice(0, 2).join(', ') || undefined };
+  const odds: Record<string, number> = {};
+  for (const [code, prices] of Object.entries(all)) {
+    const sorted = [...prices].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    odds[code] = Math.round(median * 100) / 100;
+  }
+  const n = books.length;
+  return { odds, bookmaker: n ? (n === 1 ? books[0].name : `median of ${n} bookmakers`) : undefined };
 }
 
 export function standingsOf(list: RawStanding[]): StandingRow[] {
