@@ -1089,7 +1089,9 @@ export default function App() {
             ) : (
               <>
                 <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
-                <Text style={s.probCaption}>estimate</Text>
+                <View style={s.oddTag} accessibilityLabel={`Odds ${oddsFor(m).toFixed(2)}`}>
+                  <Text style={s.oddTagText}>@ {oddsFor(m).toFixed(2)}</Text>
+                </View>
               </>
             )}
           </View>
@@ -1212,7 +1214,12 @@ export default function App() {
                   <Text style={s.featurePickLabel}>{MARKET_NAME[m.pick.market]}</Text>
                   <Text style={s.featurePickText}>{pickText(m)}</Text>
                 </View>
-                <Text style={[s.featurePct, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[s.featurePct, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
+                  <View style={s.oddTag}>
+                    <Text style={s.oddTagText}>Odd {oddsFor(m).toFixed(2)}</Text>
+                  </View>
+                </View>
               </View>
               <View style={s.meter}>
                 <View style={[s.meterFill, { width: `${m.pick.p}%`, backgroundColor: pctColor(m.pick.p) }]} />
@@ -1285,7 +1292,13 @@ export default function App() {
                   ) : (
                     <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
                   )}
-                  <Text style={s.probCaption}>{isLocked ? 'Plus' : 'our estimate'}</Text>
+                  {isLocked ? (
+                    <Text style={s.probCaption}>Plus</Text>
+                  ) : (
+                    <View style={s.oddTag}>
+                      <Text style={s.oddTagText}>@ {oddsFor(m).toFixed(2)}</Text>
+                    </View>
+                  )}
                 </View>
               </Pressable>
             );
@@ -3551,6 +3564,8 @@ const s = StyleSheet.create({
   marketRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 30 },
   marketLabel: { color: C.soft, fontSize: 13, width: 110 },
   marketTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: C.raised, overflow: 'hidden' },
+  oddTag: { marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: C.raised, borderWidth: 1, borderColor: C.line, alignSelf: 'flex-end' },
+  oddTagText: { color: C.text, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
   recentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.lineSoft },
   recentDate: { color: C.muted, fontSize: 12, width: 44, fontVariant: ['tabular-nums'] },
   recentHA: { color: C.faint, fontSize: 12, fontWeight: '700', width: 12 },

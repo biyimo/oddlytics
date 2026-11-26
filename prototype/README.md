@@ -8,4 +8,4 @@ A single-file Expo (React Native) prototype with sample data. It's for trying ou
 
 Live preview: https://claude.ai/artifact/4sdUnj6JhCGR2Z6TDnKZ7n
 
-Latest changes: recent matches for both teams on the match page, red-to-green colouring of percentages, Bankers ranked by highest probability, more realistic sample estimates, goal-market tips (Over 1.5 / 2.5, Under 3.5, BTTS yes/no), a Market filter in Bet Builder, Total goals 1.5/2.5/3.5 on the match page, Register / Sign in after Get started, drag-to-close sheets, a match Standings tab, and a glass highlight on the selected bottom tab.
+Latest changes: decimal odd on every prediction card, recent matches for both teams on the match page, red-to-green colouring of percentages, Bankers ranked by highest probability, more realistic sample estimates, goal-market tips (Over 1.5 / 2.5, Under 3.5, BTTS yes/no), a Market filter in Bet Builder, Total goals 1.5/2.5/3.5 on the match page, Register / Sign in after Get started, drag-to-close sheets, a match Standings tab, and a glass highlight on the selected bottom tab.
