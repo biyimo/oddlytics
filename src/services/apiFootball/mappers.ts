@@ -15,8 +15,9 @@ import type {
   Team,
 } from '../../types';
 import { dayOffsetFromDate } from '../../utils/dates';
+import { tipCode } from '../../utils/markets';
 import { hash } from '../../utils/random';
-import { candidates, choosePick, goalModel, lambdas, normalise } from './model';
+import { candidates, choosePick, goalModel, implied, lambdas, normalise, type GoalModel } from './model';
 
 /* ---------- raw shapes ---------- */
 
@@ -70,7 +71,7 @@ type RawTeamLeagueStats = {
 };
 
 export type RawPrediction = {
-  predictions: { advice: string | null; percent: { home: string; draw: string; away: string } };
+  predictions: { advice: string | null; under_over?: string | null; percent: { home: string; draw: string; away: string } };
   comparison: Record<string, { home: string; away: string }>;
   teams: { home: RawTeamRef & { league: RawTeamLeagueStats }; away: RawTeamRef & { league: RawTeamLeagueStats } };
   h2h: RawFixture[];
@@ -125,6 +126,8 @@ export type MiniPrediction = {
   at: number;
   percent: [number, number, number] | null;
   advice?: string;
+  /** API-Football's goals call, e.g. "+2.5" or "-3.5". */
+  underOver?: string;
   comparison: Record<string, [number, number]>;
   home: TeamSeason;
   away: TeamSeason;
@@ -302,6 +305,7 @@ export function miniPrediction(list: RawPrediction[]): MiniPrediction | null {
     at: Date.now(),
     percent: p.length === 3 && p.every((v) => v != null) ? normalise(p as [number, number, number]) : null,
     advice: r.predictions?.advice && !/no predictions/i.test(r.predictions.advice) ? r.predictions.advice : undefined,
+    underOver: r.predictions?.under_over ?? undefined,
     comparison,
     home: season(r.teams?.home?.league),
     away: season(r.teams?.away?.league),
@@ -315,7 +319,27 @@ export function miniPrediction(list: RawPrediction[]): MiniPrediction | null {
 /** A pending match: real fixture, neutral numbers until its prediction loads. */
 const PENDING_X: [number, number, number] = [45, 27, 28];
 
-export function matchOf(f: MiniFixture, pred: MiniPrediction | null | undefined): Match | null {
+/** Mix the model with bookmaker prices where we have them (half each): prices carry news the averages don't. */
+function withOdds(g: GoalModel, x: [number, number, number], odds?: Record<string, number>): { g: GoalModel; x: [number, number, number] } {
+  if (!odds) return { g, x };
+  const mix = (model: number, market?: number) => (market == null ? model : Math.round((model + market) / 2));
+  const out = { ...g };
+  out.o25 = mix(g.o25, implied(odds['O2.5'], odds['U2.5']));
+  out.btts = mix(g.btts, implied(odds['BTTS'], odds['No BTTS']));
+  out.o15 = mix(g.o15, implied(odds['O1.5']));
+  const u35 = implied(odds['U3.5']);
+  out.o35 = mix(g.o35, u35 == null ? undefined : 100 - u35);
+  out.hs = mix(g.hs, implied(odds['HS']));
+  out.as = mix(g.as, implied(odds['AS']));
+  out.hs2 = mix(g.hs2, implied(odds['HS2+']));
+  out.as2 = mix(g.as2, implied(odds['AS2+']));
+  const [h, d, a] = [odds['1'], odds['X'], odds['2']];
+  const nx =
+    h && d && a ? normalise([0, 1, 2].map((i) => (x[i] + normalise([100 / h, 100 / d, 100 / a])[i]) / 2) as [number, number, number]) : x;
+  return { g: out, x: nx };
+}
+
+export function matchOf(f: MiniFixture, pred: MiniPrediction | null | undefined, odds?: Record<string, number>): Match | null {
   const status = statusOf(f.st);
   if (status === 'skip') return null;
   const kickoff = new Date(f.ts * 1000);
@@ -327,14 +351,15 @@ export function matchOf(f: MiniFixture, pred: MiniPrediction | null | undefined)
         pred.away.gaAway ?? pred.away.gaAvg,
       )
     : lambdas();
-  const g = goalModel(lh, la);
+  const model = goalModel(lh, la);
   /* API-Football's percentages come in coarse steps (often 45/45/10), so blend them with the goals model. */
-  const x: [number, number, number] = !pred
+  const baseX: [number, number, number] = !pred
     ? PENDING_X
     : pred.percent
-      ? normalise([0, 1, 2].map((i) => (pred.percent![i] + g.x[i]) / 2) as [number, number, number])
-      : g.x;
-  const pick = choosePick(candidates(x, g), pred?.advice, f.h.name, f.a.name);
+      ? normalise([0, 1, 2].map((i) => (pred.percent![i] + model.x[i]) / 2) as [number, number, number])
+      : model.x;
+  const { g, x } = withOdds(model, baseX, odds);
+  const pick = choosePick(candidates(x, g), pred?.advice, f.h.name, f.a.name, pred?.underOver);
   const id = String(f.id);
   return {
     id,
@@ -349,6 +374,8 @@ export function matchOf(f: MiniFixture, pred: MiniPrediction | null | undefined)
     x,
     btts: g.btts,
     o25: g.o25,
+    goals: pred ? { o15: g.o15, o35: g.o35, hs: g.hs, as: g.as, hs2: g.hs2, as2: g.as2 } : undefined,
+    odds: odds?.[tipCode(pick.market, pick.outcome)],
     pick,
     reason: pred ? reasonOf(pred, f, g.expected) : 'The full prediction for this match is still loading. Open the match to load it now.',
     updated: pred ? Math.max(0, Math.round((Date.now() - pred.at) / 60000)) : 0,

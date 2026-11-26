@@ -108,17 +108,69 @@ export function candidates(x: [number, number, number], g: GoalModel): Candidate
   ];
 }
 
-/**
- * Picks the published tip. The provider's advice wins when we can read it and it
- * has a fair chance (55%+); otherwise the likeliest market under 88% (above that
- * the price is too short to be useful).
+/*
+ * How sure a market has to be before it's worth tipping. A tip's strength is how far
+ * its probability clears this bar, so a 62% Over 2.5 (7 over) beats a 74% double
+ * chance (4 over). This keeps tips spread across markets like a tipster's slip,
+ * instead of always landing on the safest double chance.
  */
-export function choosePick(all: Candidate[], advice: string | undefined, homeName: string, awayName: string): Pick {
-  const fromAdvice = adviceCode(advice, homeName, awayName);
-  const a = fromAdvice ? all.find((c) => c.code === fromAdvice) : undefined;
-  if (a && a.p >= 55) return { market: a.market, outcome: a.outcome, p: a.p };
-  const best = all.filter((c) => c.p <= 88).sort((x, y) => y.p - x.p)[0] ?? all[3];
+const BAR: Record<string, number> = {
+  '1': 47,
+  '2': 45,
+  X: 40,
+  '1X': 70,
+  X2: 70,
+  '12': 74,
+  'O1.5': 72,
+  'O2.5': 55,
+  'U2.5': 57,
+  'U3.5': 72,
+  BTTS: 52,
+  'No BTTS': 57,
+  HS: 78,
+  AS: 74,
+  'HS2+': 55,
+  'AS2+': 50,
+};
+
+/** API-Football's goals call (predictions.under_over), e.g. "+2.5" (over) or "-3.5" (under), as a tip code. */
+export function underOverCode(uo: string | null | undefined): string | undefined {
+  if (!uo) return undefined;
+  const m = uo.trim().match(/^([+-])\s*(\d\.5)$/);
+  if (!m) return undefined;
+  const code = `${m[1] === '+' ? 'O' : 'U'}${m[2]}`;
+  return ['O1.5', 'O2.5', 'U2.5', 'U3.5'].includes(code) ? code : m[1] === '+' ? 'O2.5' : 'U3.5';
+}
+
+/**
+ * Picks the published tip from every market: the one that clears its bar by the most.
+ * Markets that API-Football's own model also calls (advice, goals line) get a small
+ * nudge. Above 92% the price is too short to be useful, so those are skipped.
+ */
+export function choosePick(
+  all: Candidate[],
+  advice: string | undefined,
+  homeName: string,
+  awayName: string,
+  underOver?: string | null,
+): Pick {
+  const backed = new Set([adviceCode(advice, homeName, awayName), underOverCode(underOver)].filter(Boolean));
+  const scored = all
+    .filter((c) => c.p <= 92)
+    .map((c) => ({ c, score: c.p - (BAR[c.code] ?? 70) + (backed.has(c.code) ? 4 : 0) }))
+    .sort((a, b) => b.score - a.score || b.c.p - a.c.p);
+  const best = scored[0]?.c ?? all[3];
   return { market: best.market, outcome: best.outcome, p: best.p };
+}
+
+/**
+ * Bookmaker-implied probability (0-100) for a two-way market, with the margin removed.
+ * For a single price it falls back to 1/price less a typical 5% margin.
+ */
+export function implied(price?: number, otherSide?: number): number | undefined {
+  if (!price) return undefined;
+  if (otherSide) return (100 * (1 / price)) / (1 / price + 1 / otherSide);
+  return Math.min(99, (100 / price) * 0.95);
 }
 
 /** Reads API-Football advice such as "Double chance : draw or Arsenal" or "Winner : Arsenal". */

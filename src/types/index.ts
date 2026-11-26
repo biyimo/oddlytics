@@ -71,6 +71,8 @@ export type Match = {
   odds?: number;
   /** How many of five outside prediction sources agree with the pick (needs licensed data). */
   consensus?: number;
+  /** Other goal-market probabilities (0-100) when the source has them; otherwise derived from x and o25. */
+  goals?: { o15: number; o35: number; hs: number; as: number; hs2: number; as2: number };
   /** 'pending' while the real prediction hasn't loaded yet; the numbers are then a neutral placeholder. */
   estimate?: 'model' | 'pending';
 };
