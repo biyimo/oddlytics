@@ -38,7 +38,6 @@ import {
   type RawPrediction,
   type RawStanding,
 } from './mappers';
-import { tipCode } from '../../utils/markets';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -53,7 +52,8 @@ function deviceTimeZone() {
 
 const predPath = (id: string | number) => `predictions?fixture=${id}`;
 
-type Bundle = { fixtures: MiniFixture[]; preds: Record<string, MiniPrediction | null> };
+type Odds = { odds: Record<string, number>; bookmaker?: string };
+type Bundle = { fixtures: MiniFixture[]; preds: Record<string, MiniPrediction | null>; odds: Record<string, Odds | undefined> };
 
 /* Days with no usable answer (plan limit, offline with no cache) are simply empty. */
 async function loadDay(offset: number, tz: string): Promise<MiniFixture[]> {
@@ -86,8 +86,15 @@ export function createApiFootballApi(): OddlyticsApi {
       const seen = new Set<number>();
       const fixtures = days.flat().filter((f) => wanted(f.lg.id) && !seen.has(f.id) && seen.add(f.id));
       const preds: Record<string, MiniPrediction | null> = {};
-      await Promise.all(fixtures.map(async (f) => (preds[f.id] = (await afPeek<MiniPrediction | null>(predPath(f.id))) ?? null)));
-      return { fixtures, preds };
+      const odds: Record<string, Odds | undefined> = {};
+      /* Only what's already cached: no requests here. */
+      await Promise.all(
+        fixtures.map(async (f) => {
+          preds[f.id] = (await afPeek<MiniPrediction | null>(predPath(f.id))) ?? null;
+          odds[f.id] = await afPeek<Odds>(`odds?fixture=${f.id}`);
+        }),
+      );
+      return { fixtures, preds, odds };
     })();
     bundle = { at: Date.now(), p };
     p.catch(() => (bundle = null));
@@ -100,7 +107,7 @@ export function createApiFootballApi(): OddlyticsApi {
   };
 
   function toMatches(b: Bundle): Match[] {
-    const list = b.fixtures.map((f) => matchOf(f, b.preds[f.id])).filter((m): m is Match => m !== null);
+    const list = b.fixtures.map((f) => matchOf(f, b.preds[f.id], b.odds[f.id]?.odds)).filter((m): m is Match => m !== null);
     /* Featured: the five likeliest real picks of each day. */
     const byDay = new Map<number, Match[]>();
     for (const m of list) if (m.estimate !== 'pending') byDay.set(m.day, [...(byDay.get(m.day) ?? []), m]);
@@ -198,11 +205,11 @@ export function createApiFootballApi(): OddlyticsApi {
 
       const isUpcoming = mini ? statusOf(mini.st) === 'upcoming' : false;
       const priced = isUpcoming
-        ? await afGet<RawOdds[], ReturnType<typeof oddsOf>>(`odds?fixture=${id}`, { ttl: 3 * 3600, map: oddsOf }).catch(() => undefined)
+        ? await afGet<RawOdds[], Odds>(`odds?fixture=${id}`, { ttl: 3 * 3600, map: oddsOf }).catch(() => undefined)
         : undefined;
 
-      const match = mini ? matchOf(mini, pred) : null;
-      if (match && priced) match.odds = priced.odds[tipCode(match.pick.market, match.pick.outcome)];
+      if (priced) b.odds[id] = priced;
+      const match = mini ? matchOf(mini, pred, priced?.odds ?? b.odds[id]?.odds) : null;
       const stats = raw ? matchStatsOf(raw) : undefined;
       const detail: MatchDetail = {
         source: 'api-football',
@@ -241,7 +248,7 @@ export function createApiFootballApi(): OddlyticsApi {
         try {
           const p = await prediction(m.id);
           b.preds[m.id] = p;
-          const match = matchOf(f, p);
+          const match = matchOf(f, p, b.odds[m.id]?.odds);
           if (match) onUpdate({ match, teams: [teamOf(f.h, p?.home.form), teamOf(f.a, p?.away.form)] });
         } catch (e) {
           if (e instanceof AfError && (e.kind === 'limit' || e.kind === 'plan')) return;

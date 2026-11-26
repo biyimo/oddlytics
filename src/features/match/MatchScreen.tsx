@@ -72,7 +72,7 @@ function MatchDetail({ m }: { m: Match }) {
     (sample ? (([home, draws, away]) => ({ home, draws, away, games: 6, fromYear: 2022, toYear: 2026 }))(headToHead(m)) : undefined);
   const goalsExpected = d?.expectedGoals ?? (sample ? expectedGoalsTotal(m) : undefined);
   const pending = m.estimate === 'pending';
-  const tg = teamGoalProbs(m);
+  const tg: [number, number, number, number] = m.goals ? [m.goals.hs, m.goals.as, m.goals.hs2, m.goals.as2] : teamGoalProbs(m);
   return (
     <>
       <View style={s.detailMeta}>
@@ -283,10 +283,10 @@ function MatchDetail({ m }: { m: Match }) {
                     [
                       'Total goals',
                       [
-                        ['O1.5', '2 or more goals', Math.min(95, m.o25 + 22)],
+                        ['O1.5', '2 or more goals', m.goals ? m.goals.o15 : Math.min(95, m.o25 + 22)],
                         ['O2.5', '3 or more goals', m.o25],
                         ['U2.5', '2 goals or fewer', 100 - m.o25],
-                        ['U3.5', '3 goals or fewer', Math.min(95, 100 - m.o25 + 22)],
+                        ['U3.5', '3 goals or fewer', m.goals ? 100 - m.goals.o35 : Math.min(95, 100 - m.o25 + 22)],
                       ],
                     ],
                     [
