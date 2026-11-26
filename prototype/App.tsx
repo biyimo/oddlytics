@@ -272,16 +272,16 @@ function generateMatches(): Match[] {
         const a = 100 - h - d;
         const o25 = seeded(key + 'o', 32, 70);
         const btts = seeded(key + 'b', 34, 68);
-        const p15 = Math.min(94, o25 + 18 + (hash(key + 'x15') % 9));
-        const p35 = Math.max(6, o25 - 22 - (hash(key + 'x35') % 7));
+        const p15 = Math.min(86, o25 + 14 + (hash(key + 'x15') % 7));
+        const p35 = Math.max(13, o25 - 22 - (hash(key + 'x35') % 7));
         let pick: Match['pick'];
         const mk = hash(key + 'mk') % 10;
         let g15 = p15;
         let g35 = p35;
         if (strong) {
-          if (mk < 4) pick = { market: 'DC', outcome: '1X', p: Math.min(90, h + d) };
+          if (mk < 4) pick = { market: 'DC', outcome: '1X', p: Math.min(88, h + d) };
           else if (mk < 8) {
-            g15 = seeded(key + 'o15', 80, 89);
+            g15 = seeded(key + 'o15', 80, 88);
             pick = { market: 'OU15', outcome: 'over', p: g15 };
           } else {
             g35 = seeded(key + 'u35', 11, 20);
@@ -361,10 +361,10 @@ function consensus(m: Match) {
 }
 
 function o15(m: Match) {
-  return m.o15 ?? Math.min(94, m.o25 + 18 + (hash(m.id + 'o15') % 9));
+  return m.o15 ?? Math.min(86, m.o25 + 14 + (hash(m.id + 'o15') % 7));
 }
 function o35(m: Match) {
-  return m.o35 ?? Math.max(6, m.o25 - 22 - (hash(m.id + 'o35') % 7));
+  return m.o35 ?? Math.max(13, m.o25 - 22 - (hash(m.id + 'o35') % 7));
 }
 
 function pickText(m: Match) {
@@ -396,7 +396,13 @@ function settle(m: Match): 'won' | 'lost' | null {
 function hash(s: string) {
   let x = 7;
   for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) >>> 0;
-  return x;
+  // final mix so the low digits (used with %) vary properly between similar keys
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x85ebca6b) >>> 0;
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35) >>> 0;
+  x ^= x >>> 16;
+  return x >>> 0;
 }
 function seeded(s: string, min: number, max: number, dp = 0) {
   const v = min + ((hash(s) % 1000) / 1000) * (max - min);
@@ -407,6 +413,28 @@ function form(teamId: string) {
     const r = hash(teamId + i) % 10;
     return r < 5 ? 'W' : r < 7 ? 'D' : 'L';
   }) as ('W' | 'D' | 'L')[];
+}
+
+/* Probability colour: red for the lowest estimates through amber to green for the highest. */
+function pctColor(p: number) {
+  const t = Math.max(0, Math.min(1, (p - 40) / 45));
+  return `hsl(${Math.round(t * 130)}, 72%, 56%)`;
+}
+
+type Recent = { opp: string; home: boolean; gf: number; ga: number; r: 'W' | 'D' | 'L'; daysAgo: number; comp: CompId };
+function recentMatches(id: string): Recent[] {
+  const comp = teamComp(id);
+  const rivals = LEAGUE_TEAMS[comp].filter((t) => t !== id);
+  return form(id)
+    .map((r, i) => {
+      const k = id + 'rm' + i;
+      const opp = rivals[hash(k) % rivals.length];
+      const low = hash(k + 'g') % 3;
+      const gf = r === 'W' ? low + 1 + (hash(k + 'w') % 2) : r === 'D' ? low : low % 2;
+      const ga = r === 'W' ? Math.min(low, gf - 1) : r === 'D' ? low : gf + 1 + (hash(k + 'l') % 2);
+      return { opp, home: hash(id + i) % 2 === 1, gf, ga, r, daysAgo: 7 * (5 - i), comp };
+    })
+    .reverse();
 }
 
 function dateFor(offset: number) {
@@ -907,8 +935,8 @@ export default function App() {
   );
   const topPicks = [...bankersList].filter((m) => m.pick.p >= 55).sort((a, b) => b.pick.p - a.pick.p).slice(0, 10);
   const slip = [...dayMatches]
-    .filter((m) => consensus(m) >= 4 && m.pick.p >= 58)
-    .sort((a, b) => consensus(b) - consensus(a) || b.pick.p - a.pick.p)
+    .filter((m) => m.status !== 'finished' && m.pick.p >= 70)
+    .sort((a, b) => b.pick.p - a.pick.p || consensus(b) - consensus(a))
     .slice(0, 5);
   const liveNow = MATCHES.filter((m) => m.status === 'live' && m.day === 0);
   const freeCount = dayMatches.filter((m) => !m.premium).length;
@@ -1055,12 +1083,12 @@ export default function App() {
           <View style={s.cardProb}>
             {isLocked ? (
               <Glass overlay={<Icon name="lock" size={18} color={C.accent} />} style={s.lockProb}>
-                <Text style={s.probValue}>{m.pick.p}%</Text>
+                <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
                 <Text style={s.probCaption}>estimate</Text>
               </Glass>
             ) : (
               <>
-                <Text style={s.probValue}>{m.pick.p}%</Text>
+                <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
                 <Text style={s.probCaption}>estimate</Text>
               </>
             )}
@@ -1184,10 +1212,10 @@ export default function App() {
                   <Text style={s.featurePickLabel}>{MARKET_NAME[m.pick.market]}</Text>
                   <Text style={s.featurePickText}>{pickText(m)}</Text>
                 </View>
-                <Text style={s.featurePct}>{m.pick.p}%</Text>
+                <Text style={[s.featurePct, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
               </View>
               <View style={s.meter}>
-                <View style={[s.meterFill, { width: `${m.pick.p}%` }]} />
+                <View style={[s.meterFill, { width: `${m.pick.p}%`, backgroundColor: pctColor(m.pick.p) }]} />
               </View>
               <Text style={s.featureReason}>{m.reason}</Text>
               <Text style={s.meta}>
@@ -1206,7 +1234,7 @@ export default function App() {
           <Text style={s.meta}>{dayLabel(day)}</Text>
         </View>
         <Text style={[s.body, { marginTop: 8 }]}>
-          Up to 5 picks where our model is most confident and most outside prediction sources reach the same outcome.
+          The 5 surest picks of the day: the highest probabilities in our model (70% and up), with outside-source agreement shown for each.
         </Text>
       </View>
       {slip.length === 0 ? (
@@ -1216,7 +1244,7 @@ export default function App() {
           <View style={s.empty}>
             <Icon name="receipt-long" size={32} color={C.accent} />
             <Text style={s.emptyTitle}>No slip for this date</Text>
-            <Text style={s.emptyBody}>No match reached strong enough agreement. We'd rather show nothing than a weak slip.</Text>
+            <Text style={s.emptyBody}>No match reached 70% or higher. We'd rather show nothing than a weak slip.</Text>
           </View>
         )
       ) : (
@@ -1252,10 +1280,10 @@ export default function App() {
                 <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
                   {isLocked ? (
                     <Glass overlay={<Icon name="lock" size={18} color={C.accent} />} style={s.lockProb}>
-                      <Text style={s.probValue}>{m.pick.p}%</Text>
+                      <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
                     </Glass>
                   ) : (
-                    <Text style={s.probValue}>{m.pick.p}%</Text>
+                    <Text style={[s.probValue, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
                   )}
                   <Text style={s.probCaption}>{isLocked ? 'Plus' : 'our estimate'}</Text>
                 </View>
@@ -1676,7 +1704,7 @@ export default function App() {
                   {team(m.home).name} <Text style={{ color: C.faint }}>v</Text> {team(m.away).name}
                 </Text>
                 <Text style={s.pickLine} numberOfLines={1}>
-                  {pickText(m)} <Text style={s.pickMarket}>· {m.pick.p}% estimate</Text>
+                  {pickText(m)} <Text style={s.pickMarket}>· <Text style={{ color: pctColor(m.pick.p), fontWeight: '800' }}>{m.pick.p}%</Text> estimate</Text>
                 </Text>
               </View>
               <View style={s.oddPill}>
@@ -1846,6 +1874,27 @@ export default function App() {
 
   /* ---------- pushed screens ---------- */
 
+  const renderRecent = (id: string, limit = 5) => (
+    <View key={id} style={s.panel}>
+      <View style={[s.teamLine, { marginBottom: 6 }]}>
+        <Crest id={id} size={22} />
+        <Text style={[s.listTitle, { flex: 1 }]}>{team(id).name} · recent matches</Text>
+      </View>
+      {recentMatches(id).slice(0, limit).map((g, i) => (
+        <Pressable key={i} accessibilityRole="button" accessibilityLabel={`${g.r === 'W' ? 'Won' : g.r === 'D' ? 'Drew' : 'Lost'} ${g.gf}-${g.ga} ${g.home ? 'at home to' : 'away at'} ${team(g.opp).name}`} onPress={() => push({ name: 'team', id: g.opp })} style={s.recentRow}>
+          <Text style={s.recentDate}>{dateFor(-g.daysAgo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</Text>
+          <Text style={s.recentHA}>{g.home ? 'H' : 'A'}</Text>
+          <Crest id={g.opp} size={18} />
+          <Text style={[s.tableCell, { flex: 1 }]} numberOfLines={1}>{team(g.opp).name}</Text>
+          <Text style={s.recentScore}>{g.home ? `${g.gf} - ${g.ga}` : `${g.ga} - ${g.gf}`}</Text>
+          <View style={[s.recentChip, { backgroundColor: g.r === 'W' ? C.wonSoft : g.r === 'L' ? C.lostSoft : C.raised }]}>
+            <Text style={[s.formText, { color: g.r === 'W' ? C.won : g.r === 'L' ? C.lost : C.soft }]}>{g.r}</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   const renderDetail = (m: Match) => {
     const isLocked = locked(m);
     const result = settle(m);
@@ -1924,7 +1973,7 @@ export default function App() {
             <Text style={s.eyebrow}>{showResult ? 'Prediction as published' : 'Oddlytics estimate'}</Text>
             <Text style={s.estimatePick}>{pickText(m)}</Text>
             <View style={s.estimateRow}>
-              <Text style={s.estimatePct}>{m.pick.p}%</Text>
+              <Text style={[s.estimatePct, { color: pctColor(m.pick.p) }]}>{m.pick.p}%</Text>
               <Text style={s.estimateNote}>
                 chance in our model.{'\n'}Probability, not certainty.
               </Text>
@@ -1987,6 +2036,11 @@ export default function App() {
                 ))}
               </View>
             </View>
+            {renderRecent(m.home, 3)}
+            {renderRecent(m.away, 3)}
+            <Pressable accessibilityRole="button" onPress={() => setDetailTab('Form & H2H')} style={{ alignSelf: 'center', marginBottom: 14 }}>
+              <Text style={s.link}>See last 5 and head to head</Text>
+            </Pressable>
             <View style={s.row}>
               <View style={{ flex: 1 }}>
                 <Button kind="secondary" icon={savedIds.includes(m.id) ? 'favorite' : 'favorite-border'} label={savedIds.includes(m.id) ? 'Saved' : 'Save'} onPress={() => toggleSaved(m)} />
@@ -2017,9 +2071,9 @@ export default function App() {
                     <View key={label} style={s.marketRow}>
                       <Text style={s.marketLabel}>{label}</Text>
                       <View style={s.marketTrack}>
-                        <View style={[s.marketFill, { width: `${p}%` }]} />
+                        <View style={[s.marketFill, { width: `${p}%`, backgroundColor: pctColor(p) }]} />
                       </View>
-                      <Text style={s.marketPct}>{p}%</Text>
+                      <Text style={[s.marketPct, { color: pctColor(p) }]}>{p}%</Text>
                     </View>
                   ))}
                 </View>
@@ -2161,25 +2215,7 @@ export default function App() {
 
         {detailTab === 'Form & H2H' ? (
           <>
-            {[m.home, m.away].map((id) => (
-              <View key={id} style={s.panel}>
-                <View style={s.teamLine}>
-                  <Crest id={id} size={22} />
-                  <Text style={s.listTitle}>{team(id).name} · last 5</Text>
-                </View>
-                <View style={s.formRow}>
-                  {form(id).map((r, i) => (
-                    <View key={i} style={s.formItem}>
-                      <View style={[s.formChip, { backgroundColor: r === 'W' ? C.wonSoft : r === 'L' ? C.lostSoft : C.raised }]}>
-                        <Text style={[s.formText, { color: r === 'W' ? C.won : r === 'L' ? C.lost : C.soft }]}>{r}</Text>
-                      </View>
-                      <Text style={s.formDate}>{dateFor(-7 * (5 - i)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</Text>
-                      <Text style={s.formDate}>{hash(id + i) % 2 ? 'H' : 'A'}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
+            {[m.home, m.away].map((id) => renderRecent(id))}
             <View style={s.panel}>
               <Text style={s.eyebrow}>Head to head · last 6 meetings · 2022–2026</Text>
               <View style={s.h2h}>
@@ -3515,6 +3551,11 @@ const s = StyleSheet.create({
   marketRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 30 },
   marketLabel: { color: C.soft, fontSize: 13, width: 110 },
   marketTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: C.raised, overflow: 'hidden' },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.lineSoft },
+  recentDate: { color: C.muted, fontSize: 12, width: 44, fontVariant: ['tabular-nums'] },
+  recentHA: { color: C.faint, fontSize: 12, fontWeight: '700', width: 12 },
+  recentScore: { color: C.text, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'], marginRight: 4 },
+  recentChip: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   marketFill: { height: '100%', backgroundColor: C.accent, borderRadius: 4 },
   marketPct: { color: C.text, fontSize: 13, fontWeight: '700', width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] },
   statHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
