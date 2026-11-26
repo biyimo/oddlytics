@@ -5,6 +5,7 @@
 import type {
   Competition,
   FormResult,
+  RecentGame,
   Lineup,
   LineupPlayer,
   Match,
@@ -112,6 +113,8 @@ export type TeamSeason = {
   form: FormResult[];
   /** Venue of each of the last five games is unknown from this endpoint, so it's left out. */
   played: number;
+  playedHome?: number;
+  playedAway?: number;
   gfHome?: number;
   gaHome?: number;
   gfAway?: number;
@@ -131,7 +134,7 @@ export type MiniPrediction = {
   comparison: Record<string, [number, number]>;
   home: TeamSeason;
   away: TeamSeason;
-  h2h: { homeId: number; hg: number; ag: number; year: number }[];
+  h2h: { homeId: number; hg: number; ag: number; year: number; date?: string }[];
 };
 
 /* ---------- helpers ---------- */
@@ -283,6 +286,8 @@ function season(s: RawTeamLeagueStats | undefined): TeamSeason {
   return {
     form: formOf(s?.form),
     played,
+    playedHome: num(s?.fixtures?.played?.home),
+    playedAway: num(s?.fixtures?.played?.away),
     gfHome: num(s?.goals?.for?.average?.home),
     gaHome: num(s?.goals?.against?.average?.home),
     gfAway: num(s?.goals?.for?.average?.away),
@@ -312,8 +317,37 @@ export function miniPrediction(list: RawPrediction[]): MiniPrediction | null {
     h2h: (r.h2h ?? [])
       .filter((g) => g.goals.home != null && g.goals.away != null)
       .slice(0, 10)
-      .map((g) => ({ homeId: g.teams.home.id, hg: g.goals.home!, ag: g.goals.away!, year: new Date(g.fixture.date).getFullYear() })),
+      .map((g) => ({
+        homeId: g.teams.home.id,
+        hg: g.goals.home!,
+        ag: g.goals.away!,
+        year: new Date(g.fixture.date).getFullYear(),
+        date: g.fixture.date.slice(0, 10),
+      })),
   };
+}
+
+/*
+ * Early in a season a team's averages rest on a handful of games (5 goals a game after
+ * 4 matches is not a real scoring rate), so each average is pulled toward a typical
+ * league value, weighted as if it were PRIOR_GAMES extra games at that value.
+ */
+const PRIOR_GAMES = 5;
+const shrink = (avg: number | undefined, n: number | undefined, prior: number) =>
+  avg == null ? undefined : (avg * (n ?? 0) + prior * PRIOR_GAMES) / ((n ?? 0) + PRIOR_GAMES);
+
+/** Expected goals for each side, from venue-specific averages where possible. */
+export function teamLambdas(p: MiniPrediction): [number, number] {
+  const h = p.home;
+  const a = p.away;
+  const hn = h.gfHome != null ? h.playedHome : h.played;
+  const an = a.gfAway != null ? a.playedAway : a.played;
+  return lambdas(
+    shrink(h.gfHome ?? h.gfAvg, hn, 1.45),
+    shrink(h.gaHome ?? h.gaAvg, hn, 1.15),
+    shrink(a.gfAway ?? a.gfAvg, an, 1.15),
+    shrink(a.gaAway ?? a.gaAvg, an, 1.45),
+  );
 }
 
 /** A pending match: real fixture, neutral numbers until its prediction loads. */
@@ -343,14 +377,7 @@ export function matchOf(f: MiniFixture, pred: MiniPrediction | null | undefined,
   const status = statusOf(f.st);
   if (status === 'skip') return null;
   const kickoff = new Date(f.ts * 1000);
-  const [lh, la] = pred
-    ? lambdas(
-        pred.home.gfHome ?? pred.home.gfAvg,
-        pred.home.gaHome ?? pred.home.gaAvg,
-        pred.away.gfAway ?? pred.away.gfAvg,
-        pred.away.gaAway ?? pred.away.gaAvg,
-      )
-    : lambdas();
+  const [lh, la] = pred ? teamLambdas(pred) : lambdas();
   const model = goalModel(lh, la);
   /* API-Football's percentages come in coarse steps (often 45/45/10), so blend them with the goals model. */
   const baseX: [number, number, number] = !pred
@@ -434,12 +461,7 @@ export function matchStatsOf(f: RawFixture): { rows: StatRow[]; xg?: [number, nu
 
 /** Expected total goals for a match from both teams' season averages. */
 export function expectedGoalsOf(p: MiniPrediction) {
-  const [lh, la] = lambdas(
-    p.home.gfHome ?? p.home.gfAvg,
-    p.home.gaHome ?? p.home.gaAvg,
-    p.away.gfAway ?? p.away.gfAvg,
-    p.away.gaAway ?? p.away.gaAvg,
-  );
+  const [lh, la] = teamLambdas(p);
   return Math.round((lh + la) * 10) / 10;
 }
 
@@ -556,4 +578,28 @@ export function standingsOf(list: RawStanding[]): StandingRow[] {
     /* Standings form lists the latest game first; the app wants oldest first. */
     form: formOf((r.form ?? '').split('').reverse().join('')),
   }));
+}
+
+/** A team's recent finished games, newest first, from its own side. */
+export function recentOf(list: RawFixture[], teamId: number): RecentGame[] {
+  return list
+    .filter((f) => statusOf(f.fixture.status.short) === 'finished' && f.goals.home != null && f.goals.away != null)
+    .sort((a, b) => b.fixture.timestamp - a.fixture.timestamp)
+    .slice(0, 5)
+    .map((f) => {
+      const home = f.teams.home.id === teamId;
+      const gf = home ? f.goals.home! : f.goals.away!;
+      const ga = home ? f.goals.away! : f.goals.home!;
+      const opp = home ? f.teams.away : f.teams.home;
+      return {
+        date: f.fixture.date.slice(0, 10),
+        opponent: opp.name,
+        opponentId: String(opp.id),
+        home,
+        gf,
+        ga,
+        result: gf > ga ? 'W' : gf === ga ? 'D' : 'L',
+        comp: f.league.name,
+      };
+    });
 }

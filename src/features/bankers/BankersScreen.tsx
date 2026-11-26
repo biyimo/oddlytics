@@ -9,7 +9,7 @@ import { BRAND } from '../../config/brand';
 import { TEASER } from '../../data/sample/trackRecord';
 import { useApp } from '../../state/AppProvider';
 import { useData } from '../../state/DataProvider';
-import { C } from '../../theme/colors';
+import { C, probColor } from '../../theme/colors';
 import { s } from '../../theme/styles';
 import type { Match } from '../../types';
 import { ago, dayLabel } from '../../utils/dates';
@@ -53,10 +53,10 @@ function FeatureCard({ m, rank }: { m: Match; rank: number }) {
             </Text>
           </View>
         </View>
-        <Text style={s.featurePct}>{m.pick.p}%</Text>
+        <Text style={[s.featurePct, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
       </View>
       <View style={s.meter}>
-        <View style={[s.meterFill, { width: `${m.pick.p}%` }]} />
+        <View style={[s.meterFill, { width: `${m.pick.p}%`, backgroundColor: probColor(m.pick.p) }]} />
       </View>
       <Text style={s.featureReason}>{m.reason}</Text>
       <Text style={s.meta}>
@@ -172,9 +172,11 @@ function Slip() {
   const { day, locked, openMatch } = useApp();
   const { matches, team, comp, pickText, consensus } = useData();
   const dayMatches = matches.filter((m) => m.day === day);
+  /* Outside-source agreement only exists in the sample data. With live data the slip is simply the day's surest picks. */
+  const hasConsensus = dayMatches.some((m) => m.consensus != null);
   const slip = [...dayMatches]
-    .filter((m) => consensus(m) >= 4 && m.pick.p >= 58)
-    .sort((a, b) => consensus(b) - consensus(a) || b.pick.p - a.pick.p)
+    .filter((m) => m.estimate !== 'pending' && (hasConsensus ? consensus(m) >= 4 && m.pick.p >= 58 : m.pick.p >= 65))
+    .sort((a, b) => (hasConsensus ? consensus(b) - consensus(a) : 0) || b.pick.p - a.pick.p)
     .slice(0, 5);
   return (
     <>
@@ -185,7 +187,9 @@ function Slip() {
           <Text style={s.meta}>{dayLabel(day)}</Text>
         </View>
         <Text style={[s.body, { marginTop: 8 }]}>
-          Up to 5 picks where our model is most confident and most outside prediction sources reach the same outcome.
+          {hasConsensus
+            ? 'Up to 5 picks where our model is most confident and most outside prediction sources reach the same outcome.'
+            : 'Up to 5 of the day’s surest picks, highest probability first (65% and up).'}
         </Text>
       </View>
       {slip.length === 0 ? (
@@ -195,7 +199,10 @@ function Slip() {
           <View style={s.empty}>
             <Icon name="receipt-long" size={32} color={C.accent} />
             <Text style={s.emptyTitle}>No slip for this date</Text>
-            <Text style={s.emptyBody}>No match reached strong enough agreement. We'd rather show nothing than a weak slip.</Text>
+            <Text style={s.emptyBody}>
+              {hasConsensus ? 'No match reached strong enough agreement.' : 'No pick reached 65% yet.'} We'd rather show nothing than a weak
+              slip.
+            </Text>
           </View>
         )
       ) : (
@@ -208,7 +215,7 @@ function Slip() {
               <Pressable
                 key={m.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Slip pick ${i + 1}: ${team(m.home).name} versus ${team(m.away).name}. ${isLocked ? 'Plus insight' : `${pickText(m)}, ${m.pick.p} percent`}. ${agree} of 5 sources agree.`}
+                accessibilityLabel={`Slip pick ${i + 1}: ${team(m.home).name} versus ${team(m.away).name}. ${isLocked ? 'Plus insight' : `${pickText(m)}, ${m.pick.p} percent`}. ${hasConsensus ? `${agree} of 5 sources agree.` : ''}`}
                 onPress={() => openMatch(m)}
                 style={s.slipRow}
               >
@@ -241,10 +248,16 @@ function Slip() {
                     </Text>
                   </View>
                   <View style={[s.row, { marginTop: 8, gap: 4 }]}>
-                    {[0, 1, 2, 3, 4].map((k) => (
-                      <View key={k} style={[s.agreeDot, k < agree && s.agreeDotOn]} />
-                    ))}
-                    <Text style={[s.meta, { marginLeft: 6 }]}>{agree}/5 sources agree</Text>
+                    {hasConsensus ? (
+                      <>
+                        {[0, 1, 2, 3, 4].map((k) => (
+                          <View key={k} style={[s.agreeDot, k < agree && s.agreeDotOn]} />
+                        ))}
+                        <Text style={[s.meta, { marginLeft: 6 }]}>{agree}/5 sources agree</Text>
+                      </>
+                    ) : (
+                      <Text style={s.meta}>#{i + 1} surest pick of the day</Text>
+                    )}
                     {result ? (
                       <View style={{ marginLeft: 'auto' }}>
                         <ResultBadge result={result} />
@@ -255,10 +268,10 @@ function Slip() {
                 <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
                   {isLocked ? (
                     <Glass overlay={<Icon name="lock" size={18} color={C.accent} />} style={s.lockProb}>
-                      <Text style={s.probValue}>{m.pick.p}%</Text>
+                      <Text style={[s.probValue, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
                     </Glass>
                   ) : (
-                    <Text style={s.probValue}>{m.pick.p}%</Text>
+                    <Text style={[s.probValue, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
                   )}
                   <Text style={s.probCaption}>{isLocked ? 'Plus' : 'our estimate'}</Text>
                 </View>
@@ -267,7 +280,13 @@ function Slip() {
           })}
         </>
       )}
-      <Notice text="Agreement between sources needs licensed data; in this build it is sample data. Even when every source agrees, a result is never certain. We don't multiply the picks into one combined chance." />
+      <Notice
+        text={
+          hasConsensus
+            ? "Agreement between sources needs licensed data; in this build it is sample data. Even when every source agrees, a result is never certain. We don't multiply the picks into one combined chance."
+            : "Even the surest pick can lose. We don't multiply the picks into one combined chance."
+        }
+      />
     </>
   );
 }

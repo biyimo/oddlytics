@@ -101,6 +101,19 @@ export type Lineup = {
   subs: LineupPlayer[];
 };
 
+/** One of a team's recent games, from that team's side. */
+export type RecentGame = {
+  /** ISO date, YYYY-MM-DD. */
+  date: string;
+  opponent: string;
+  opponentId: TeamId;
+  home: boolean;
+  gf: number;
+  ga: number;
+  result: FormResult;
+  comp?: string;
+};
+
 /** [label, home value, away value, unit?] */
 export type StatRow = [string, number, number, string?];
 
@@ -117,6 +130,10 @@ export type MatchDetail = {
   lineups?: Lineup[];
   /** Results of recent meetings, from the home team's side. */
   h2h?: { home: number; draws: number; away: number; games: number; fromYear?: number; toYear?: number };
+  /** Each team's last games, newest first (needs a paid API-Football plan). */
+  recent?: Record<TeamId, RecentGame[]>;
+  /** Individual past meetings, newest first. */
+  h2hGames?: { date?: string; homeId: TeamId; hg: number; ag: number }[];
   /** Venue (H/A) of each of the last five games, oldest first. */
   formVenues?: Record<TeamId, ('H' | 'A')[]>;
   /** The provider's own one-line advice, e.g. "Double chance : draw or Arsenal". */
