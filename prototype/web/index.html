@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oddlytics prototype</title>
+<style>
+html,body{margin:0;height:100%;background:#050505;font-family:Inter,system-ui,sans-serif;color:#A7A9B1}
+.wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(circle at 50% 30%,#1b1830,#050505 70%)}
+.phone{width:390px;height:min(844px,calc(100vh - 70px));border-radius:46px;border:10px solid #1c1c20;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px #333;overflow:hidden;background:#000}
+iframe{border:0;width:100%;height:100%;display:block}
+.note{font-size:12px;letter-spacing:.02em}
+@media (max-width:500px){.wrap{display:block}.phone{width:100%;height:100%;border:0;border-radius:0;box-shadow:none}.note{display:none}}
+</style></head>
+<body><div class="wrap"><div class="phone"><iframe src="./app.html" title="Oddlytics app prototype"></iframe></div>
+<div class="note">Clickable prototype with sample data only. Not real fixtures, odds or model output.</div></div></body></html>
