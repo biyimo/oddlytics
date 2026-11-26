@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "predlytics",
+    "slug": "predlytics",
+    "scheme": "predlytics",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {"supportsTablet": true},
+    "android": {"edgeToEdgeEnabled": true}
+  }
+}
