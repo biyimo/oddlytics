@@ -40,7 +40,7 @@ export const AF_CONFIG = {
   /** Days either side of today to load. The free plan only allows yesterday, today and tomorrow (1). */
   dayRange: Math.min(7, int(clean(process.env.EXPO_PUBLIC_FOOTBALL_DAY_RANGE), 1)),
   /** Most predictions to prefetch per load for the match lists. Each one is a request (free plan: 100/day). */
-  prefetchPredictions: int(clean(process.env.EXPO_PUBLIC_FOOTBALL_PREFETCH_PREDICTIONS), 20),
+  prefetchPredictions: int(clean(process.env.EXPO_PUBLIC_FOOTBALL_PREFETCH_PREDICTIONS), 30),
 };
 
 export const isApiFootballConfigured = () => AF_CONFIG.proxyUrl.length > 0;

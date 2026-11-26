@@ -11,7 +11,7 @@ import { isSampleData } from '../../services/api';
 import { expectedGoalsTotal, formVenue, headToHead, matchStatRows, matchXg } from '../../data/sample/insights';
 import { useApp } from '../../state/AppProvider';
 import { useData } from '../../state/DataProvider';
-import { C } from '../../theme/colors';
+import { C, probColor } from '../../theme/colors';
 import { s } from '../../theme/styles';
 import type { Lineup, Match, MatchEvent, StandingRow, StatRow } from '../../types';
 import { ago, dateFor, dayLabel, longDate, ordinal } from '../../utils/dates';
@@ -165,7 +165,7 @@ function MatchDetail({ m }: { m: Match }) {
               <Text style={[s.estimatePick, { marginTop: 0, flex: 1 }]}>{pickText(m)}</Text>
             </View>
             <View style={s.estimateRow}>
-              <Text style={s.estimatePct}>{m.pick.p}%</Text>
+              <Text style={[s.estimatePct, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
               <Text style={s.estimateNote}>chance in our model.{'\n'}Probability, not certainty.</Text>
             </View>
             <Text style={s.fieldLabel}>Match result</Text>
@@ -321,9 +321,9 @@ function MatchDetail({ m }: { m: Match }) {
                             </Text>
                           </View>
                           <View style={s.marketTrack}>
-                            <View style={[s.marketFill, { width: `${p}%` }]} />
+                            <View style={[s.marketFill, { width: `${p}%`, backgroundColor: probColor(p) }]} />
                           </View>
-                          <Text style={s.marketPct}>{p}%</Text>
+                          <Text style={[s.marketPct, { color: probColor(p) }]}>{p}%</Text>
                         </View>
                       );
                     })}
@@ -486,6 +486,28 @@ function MatchDetail({ m }: { m: Match }) {
                   </View>
                 ))}
               </View>
+              {d?.recent?.[id]?.length ? (
+                <View style={{ marginTop: 10 }}>
+                  {d.recent[id].map((g, i) => (
+                    <View key={i} style={s.evidenceRow}>
+                      <Text style={[s.listSub, { width: 58 }]}>{shortDate(g.date)}</Text>
+                      <Text style={[s.evidenceValue, { flex: 1 }]} numberOfLines={1}>
+                        {g.home ? 'vs' : 'at'} {g.opponent}
+                      </Text>
+                      <Text style={[s.evidenceValue, { width: 44, textAlign: 'right' }]}>
+                        {g.gf}–{g.ga}
+                      </Text>
+                      <View style={{ marginLeft: 8 }}>
+                        <FormChip r={g.result} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : !sample && detailState === 'ready' && team(id).form.length ? (
+                <Text style={[s.meta, { marginTop: 8 }]}>
+                  W/D/L from this season, oldest first. Full recent results need a paid API-Football plan.
+                </Text>
+              ) : null}
             </View>
           ))}
           {h2hData ? (
@@ -508,6 +530,18 @@ function MatchDetail({ m }: { m: Match }) {
                   </View>
                 ))}
               </View>
+              {d?.h2hGames?.length ? (
+                <View style={{ marginBottom: 8 }}>
+                  {d.h2hGames.map((g, i) => (
+                    <View key={i} style={s.evidenceRow}>
+                      <Text style={[s.listSub, { width: 78 }]}>{g.date ? shortDate(g.date, true) : ''}</Text>
+                      <Text style={[s.evidenceValue, { flex: 1 }]} numberOfLines={1}>
+                        {team(g.homeId).short} {g.hg}–{g.ag} {team(g.homeId === m.home ? m.away : m.home).short}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               <Text style={s.meta}>A sample of {h2hData.games} is small. Treat head-to-head as context, not evidence.</Text>
             </View>
           ) : (
@@ -603,4 +637,10 @@ function LineupPanel({ lineup }: { lineup: Lineup }) {
       {lineup.coach ? <Text style={s.meta}>Coach: {lineup.coach}</Text> : null}
     </View>
   );
+}
+
+/** "25 Nov" (or "25 Nov 2024") from an ISO date. */
+function shortDate(iso: string, withYear = false) {
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString('en-GB', withYear ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' });
 }

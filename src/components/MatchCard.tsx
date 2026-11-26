@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useApp } from '../state/AppProvider';
 import { useData } from '../state/DataProvider';
-import { C } from '../theme/colors';
+import { C, probColor } from '../theme/colors';
 import { s } from '../theme/styles';
 import type { Match } from '../types';
 import { shortDay } from '../utils/dates';
@@ -68,12 +68,14 @@ export function MatchCard({ m, showDay }: { m: Match; showDay?: boolean }) {
         <View style={s.cardProb}>
           {isLocked ? (
             <Glass overlay={<Icon name="lock" size={18} color={C.accent} />} style={s.lockProb}>
-              <Text style={s.probValue}>{m.pick.p}%</Text>
+              <Text style={[s.probValue, { color: probColor(m.pick.p) }]}>{m.pick.p}%</Text>
               <Text style={s.probCaption}>estimate</Text>
             </Glass>
           ) : (
             <>
-              <Text style={s.probValue}>{m.estimate === 'pending' ? '…' : `${m.pick.p}%`}</Text>
+              <Text style={[s.probValue, m.estimate !== 'pending' && { color: probColor(m.pick.p) }]}>
+                {m.estimate === 'pending' ? '…' : `${m.pick.p}%`}
+              </Text>
               <Text style={s.probCaption}>{m.estimate === 'pending' ? 'loading' : 'estimate'}</Text>
             </>
           )}

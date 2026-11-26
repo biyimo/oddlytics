@@ -6,7 +6,7 @@ import { Screen } from '../../components/Screen';
 import { Button, Chip, Icon, TipBadge } from '../../components/ui';
 import { type BuilderSettings, DEFAULT_BUILDER, useApp } from '../../state/AppProvider';
 import { useData } from '../../state/DataProvider';
-import { C } from '../../theme/colors';
+import { C, probColor } from '../../theme/colors';
 import { s } from '../../theme/styles';
 import { dateFor, dayLabel } from '../../utils/dates';
 import { MARKET_NAME, maxOddAt, oddsFor, pickCode } from '../../utils/markets';
@@ -251,7 +251,7 @@ export default function BetBuilderScreen() {
                 <View style={[s.row, { gap: 8 }]}>
                   <TipBadge code={pickCode(m)} />
                   <Text style={[s.pickLine, { flex: 1 }]} numberOfLines={1}>
-                    {MARKET_NAME[m.pick.market]} <Text style={s.pickMarket}>· {m.pick.p}%</Text>
+                    {MARKET_NAME[m.pick.market]} <Text style={[s.pickMarket, { color: probColor(m.pick.p) }]}>· {m.pick.p}%</Text>
                   </Text>
                 </View>
               </View>

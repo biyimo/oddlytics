@@ -24,3 +24,13 @@ export const C = {
 
 /* Gradient behind every screen. */
 export const SCREEN_GRADIENT = ['#000000', '#111111', '#050505'] as const;
+
+/**
+ * Colour for a probability: red at 50% and below, through amber, to green at 90% and above.
+ * Used on every percentage so users can read confidence at a glance.
+ */
+export function probColor(p: number) {
+  const t = Math.min(1, Math.max(0, (p - 50) / 40));
+  const hue = Math.round(t * 125); // 0 = red, 60 = amber, 125 = green
+  return `hsl(${hue}, 78%, ${58 - Math.round(Math.sin(t * Math.PI) * 6)}%)`;
+}

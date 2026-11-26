@@ -27,6 +27,7 @@ import {
   miniFixture,
   miniPrediction,
   oddsOf,
+  recentOf,
   seasonStatsOf,
   standingsOf,
   statusOf,
@@ -69,6 +70,22 @@ async function loadDay(offset: number, tz: string): Promise<MiniFixture[]> {
 }
 
 const STANDINGS_BLOCK = 'af1:planblock:standings';
+const RECENT_BLOCK = 'af1:planblock:last';
+
+/* A team's last five games. The free plan refuses the `last` parameter, so after one refusal we stop asking for 12 hours. */
+async function recentGames(teamId: number) {
+  const block = await load<number>(RECENT_BLOCK);
+  if (block && Date.now() - block < 12 * 3600_000) return undefined;
+  try {
+    return await afGet<RawFixture[], ReturnType<typeof recentOf>>(`fixtures?team=${teamId}&last=5`, {
+      ttl: 12 * 3600,
+      map: (r) => recentOf(r, teamId),
+    });
+  } catch (e) {
+    if (e instanceof AfError && e.kind === 'plan') await save(RECENT_BLOCK, Date.now());
+    return undefined;
+  }
+}
 
 export function createApiFootballApi(): OddlyticsApi {
   const leagueOrder = AF_CONFIG.leagues === 'all' ? [] : AF_CONFIG.leagues;
@@ -209,6 +226,8 @@ export function createApiFootballApi(): OddlyticsApi {
         : undefined;
 
       if (priced) b.odds[id] = priced;
+      const homeRecent = mini ? await recentGames(mini.h.id) : undefined;
+      const awayRecent = mini && homeRecent ? await recentGames(mini.a.id) : undefined;
       const match = mini ? matchOf(mini, pred, priced?.odds ?? b.odds[id]?.odds) : null;
       const stats = raw ? matchStatsOf(raw) : undefined;
       const detail: MatchDetail = {
@@ -220,6 +239,8 @@ export function createApiFootballApi(): OddlyticsApi {
         events: raw ? eventsOf(raw) : undefined,
         lineups: raw ? lineupsOf(raw) : undefined,
         h2h: pred && mini ? h2hOf(pred, mini.h.id) : undefined,
+        h2hGames: pred?.h2h.length ? pred.h2h.map((g) => ({ date: g.date, homeId: String(g.homeId), hg: g.hg, ag: g.ag })) : undefined,
+        recent: mini && homeRecent && awayRecent ? { [String(mini.h.id)]: homeRecent, [String(mini.a.id)]: awayRecent } : undefined,
         advice: pred?.advice,
         odds: priced?.odds,
         bookmaker: priced?.bookmaker,
@@ -248,6 +269,10 @@ export function createApiFootballApi(): OddlyticsApi {
         try {
           const p = await prediction(m.id);
           b.preds[m.id] = p;
+          /* Bookmaker prices make the numbers far more realistic; fetch them for games in the next two days while quota allows. */
+          if (!b.odds[m.id] && m.status === 'upcoming' && m.day <= 1 && (quota.dayRemaining == null || quota.dayRemaining >= 30)) {
+            b.odds[m.id] = await afGet<RawOdds[], Odds>(`odds?fixture=${m.id}`, { ttl: 3 * 3600, map: oddsOf }).catch(() => undefined);
+          }
           const match = matchOf(f, p, b.odds[m.id]?.odds);
           if (match) onUpdate({ match, teams: [teamOf(f.h, p?.home.form), teamOf(f.a, p?.away.form)] });
         } catch (e) {
