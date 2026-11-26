@@ -3,7 +3,7 @@ import { Pressable, Switch, Text, View } from 'react-native';
 import { Screen } from '../../components/Screen';
 import { Button, Icon, SettingRow } from '../../components/ui';
 import { BRAND } from '../../config/brand';
-import { isSampleData } from '../../services/api';
+import { dataSource, isFallback } from '../../services/api';
 import { useApp } from '../../state/AppProvider';
 import { C } from '../../theme/colors';
 import { s } from '../../theme/styles';
@@ -108,7 +108,14 @@ export default function AccountScreen() {
       <Text style={s.foot}>
         {BRAND.name} gives football information and probability estimates. It does not take bets. 18+ only. Availability depends on local
         rules. Version {BRAND.version}
-        {isSampleData() ? ' · sample data' : ''}.
+        {dataSource() === 'api-football'
+          ? ' · data from API-Football'
+          : dataSource() === 'sample'
+            ? isFallback()
+              ? ' · sample data (live data unavailable)'
+              : ' · sample data'
+            : ''}
+        .
       </Text>
     </Screen>
   );

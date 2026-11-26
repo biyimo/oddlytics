@@ -71,6 +71,58 @@ export type Match = {
   odds?: number;
   /** How many of five outside prediction sources agree with the pick (needs licensed data). */
   consensus?: number;
+  /** 'pending' while the real prediction hasn't loaded yet; the numbers are then a neutral placeholder. */
+  estimate?: 'model' | 'pending';
+};
+
+/* Match page extras. All optional: show what the provider has, hide the rest. */
+
+export type MatchEvent = {
+  minute: number;
+  extra?: number;
+  team: TeamId;
+  kind: 'goal' | 'card' | 'subst' | 'var' | 'other';
+  /** Provider wording, e.g. "Normal Goal", "Yellow Card", "Substitution 1". */
+  detail: string;
+  player: string;
+  /** Assist, or the player coming on for a substitution. */
+  assist?: string;
+};
+
+export type LineupPlayer = { name: string; number?: number; pos?: string };
+
+export type Lineup = {
+  team: TeamId;
+  formation?: string;
+  coach?: string;
+  startXI: LineupPlayer[];
+  subs: LineupPlayer[];
+};
+
+/** [label, home value, away value, unit?] */
+export type StatRow = [string, number, number, string?];
+
+export type MatchDetail = {
+  /** Stats from this match (live or finished). */
+  matchStats?: StatRow[];
+  /** Season averages of both teams before this match. */
+  seasonStats?: StatRow[];
+  /** Expected goals in this match, when the provider has it. */
+  xg?: [number, number];
+  /** Expected total goals from the model. */
+  expectedGoals?: number;
+  events?: MatchEvent[];
+  lineups?: Lineup[];
+  /** Results of recent meetings, from the home team's side. */
+  h2h?: { home: number; draws: number; away: number; games: number; fromYear?: number; toYear?: number };
+  /** Venue (H/A) of each of the last five games, oldest first. */
+  formVenues?: Record<TeamId, ('H' | 'A')[]>;
+  /** The provider's own one-line advice, e.g. "Double chance : draw or Arsenal". */
+  advice?: string;
+  /** Decimal prices keyed by tip code (1, X, 2, 1X, O2.5, BTTS ...). */
+  odds?: Record<string, number>;
+  bookmaker?: string;
+  source: 'api-football' | 'sample';
 };
 
 export type StandingRow = {

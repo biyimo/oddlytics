@@ -34,7 +34,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "doctor": "npx expo-doctor"
+    "doctor": "npx expo-doctor",
+    "proxy": "node server/dev-proxy.mjs"
   },
   "private": true
 }

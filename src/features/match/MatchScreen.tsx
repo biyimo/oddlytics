@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Crest } from '../../components/Crest';
@@ -7,12 +7,13 @@ import { Screen } from '../../components/Screen';
 import { StandingsTable } from '../../components/StandingsTable';
 import { Button, FormChip, Icon, LivePulse, Notice, ProbBar, ResultBadge, TipBadge } from '../../components/ui';
 import { BRAND } from '../../config/brand';
+import { isSampleData } from '../../services/api';
 import { expectedGoalsTotal, formVenue, headToHead, matchStatRows, matchXg } from '../../data/sample/insights';
 import { useApp } from '../../state/AppProvider';
 import { useData } from '../../state/DataProvider';
 import { C } from '../../theme/colors';
 import { s } from '../../theme/styles';
-import type { Match, StandingRow } from '../../types';
+import type { Lineup, Match, MatchEvent, StandingRow, StatRow } from '../../types';
 import { ago, dateFor, dayLabel, longDate, ordinal } from '../../utils/dates';
 import { MARKET_NAME, pickCode, settle, teamGoalProbs } from '../../utils/markets';
 
@@ -39,8 +40,21 @@ export default function MatchScreen() {
 
 function MatchDetail({ m }: { m: Match }) {
   const { locked, followTeams, toggleTeam, savedIds, toggleSaved, openComp, openPremium, openTeam } = useApp();
-  const { team, comp: compOf, standings, teamComp, pickText } = useData();
+  const { team, comp: compOf, standings, teamComp, pickText, detail, loadDetail } = useData();
   const [detailTab, setDetailTab] = useState<DetailTab>('Overview');
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'error'>('loading');
+  useEffect(() => {
+    let alive = true;
+    setDetailState('loading');
+    loadDetail(m.id)
+      .then(() => alive && setDetailState('ready'))
+      .catch(() => alive && setDetailState('error'));
+    return () => {
+      alive = false;
+    };
+  }, [m.id, loadDetail]);
+  const d = detail(m.id);
+  const sample = isSampleData();
   const [detailMode, setDetailMode] = useState<'Result' | 'Preview'>('Result');
   const isLocked = locked(m);
   const result = settle(m);
@@ -49,9 +63,15 @@ function MatchDetail({ m }: { m: Match }) {
   const A = team(m.away);
   const showResult = m.status === 'finished' && detailMode === 'Result';
   const tabs = TABS;
-  const statRows = matchStatRows(m);
-  const [xgH, xgA] = matchXg(m);
-  const h2h = headToHead(m);
+  /* Real data where the provider has it; seeded sample values only in sample mode. */
+  const statRows: StatRow[] = d?.matchStats ?? d?.seasonStats ?? (sample ? matchStatRows(m) : []);
+  const statsTitle = d?.matchStats ? 'This match' : 'Season averages · observed';
+  const xg: [number, number] | undefined = d?.xg ?? (sample ? matchXg(m) : undefined);
+  const h2hData =
+    d?.h2h ??
+    (sample ? (([home, draws, away]) => ({ home, draws, away, games: 6, fromYear: 2022, toYear: 2026 }))(headToHead(m)) : undefined);
+  const goalsExpected = d?.expectedGoals ?? (sample ? expectedGoalsTotal(m) : undefined);
+  const pending = m.estimate === 'pending';
   const tg = teamGoalProbs(m);
   return (
     <>
@@ -133,6 +153,13 @@ function MatchDetail({ m }: { m: Match }) {
               </View>
             ) : null}
             <Text style={s.eyebrow}>{showResult ? 'Prediction as published' : `${BRAND.name} estimate`}</Text>
+            {pending ? (
+              <Text style={[s.meta, { marginTop: 6 }]}>
+                {detailState === 'loading'
+                  ? 'Loading the full prediction…'
+                  : 'The prediction for this match is not available yet. Numbers below are a neutral placeholder.'}
+              </Text>
+            ) : null}
             <View style={[s.row, { gap: 12, marginTop: 8 }]}>
               <TipBadge code={pickCode(m)} size="lg" />
               <Text style={[s.estimatePick, { marginTop: 0, flex: 1 }]}>{pickText(m)}</Text>
@@ -145,8 +172,14 @@ function MatchDetail({ m }: { m: Match }) {
             <ProbBar parts={m.x} labels={[`1 · ${H.short}`, 'X · Draw', `2 · ${A.short}`]} />
             <View style={s.metaGrid}>
               <Text style={s.meta}>Market: {MARKET_NAME[m.pick.market]}</Text>
-              <Text style={s.meta}>Model: baseline-0.1</Text>
-              <Text style={s.meta}>Published: {dayLabel(m.day - 1)} 09:00</Text>
+              <Text style={s.meta}>Model: {sample ? 'baseline-0.1' : 'API-Football + goals model'}</Text>
+              {sample ? <Text style={s.meta}>Published: {dayLabel(m.day - 1)} 09:00</Text> : null}
+              {m.odds ? (
+                <Text style={s.meta}>
+                  Price: {m.odds.toFixed(2)}
+                  {d?.bookmaker ? ` · ${d.bookmaker}` : ''}
+                </Text>
+              ) : null}
               <Text style={s.meta}>{m.status === 'finished' ? 'Locked at kick-off' : `Updated ${ago(m.updated)}`}</Text>
             </View>
           </View>
@@ -198,7 +231,7 @@ function MatchDetail({ m }: { m: Match }) {
               {[
                 [`${H.name} form`, H.form.join(' ')],
                 [`${A.name} form`, A.form.join(' ')],
-                ['Goals expected', `${expectedGoalsTotal(m)} in total`],
+                ['Goals expected', goalsExpected != null ? `${goalsExpected} in total` : '–'],
               ].map(([k, v]) => (
                 <View key={k} style={s.evidenceRow}>
                   <Text style={s.listSub}>{k}</Text>
@@ -207,6 +240,7 @@ function MatchDetail({ m }: { m: Match }) {
               ))}
             </View>
           </View>
+          {d?.events?.length ? <EventsPanel events={d.events} homeId={m.home} /> : null}
           <View style={s.row}>
             <View style={{ flex: 1 }}>
               <Button
@@ -327,9 +361,10 @@ function MatchDetail({ m }: { m: Match }) {
         <View style={s.panel}>
           <View style={s.statHead}>
             <Crest id={m.home} size={22} />
-            <Text style={s.eyebrow}>Season averages · observed</Text>
+            <Text style={s.eyebrow}>{statsTitle}</Text>
             <Crest id={m.away} size={22} />
           </View>
+          {!statRows.length ? <Notice text={detailState === 'loading' ? 'Loading stats…' : 'No stats for this match yet.'} /> : null}
           {statRows.map(([label, hv, av, unit]) => {
             const max = Math.max(hv, av) || 1;
             return (
@@ -356,18 +391,18 @@ function MatchDetail({ m }: { m: Match }) {
               </View>
             );
           })}
-          {comp.xg ? (
+          {comp.xg && xg ? (
             <View style={s.statRow}>
               <View style={s.statNums}>
-                <Text style={s.statNum}>{xgH}</Text>
-                <Text style={s.statLabel}>xG / match</Text>
-                <Text style={s.statNum}>{xgA}</Text>
+                <Text style={s.statNum}>{xg[0]}</Text>
+                <Text style={s.statLabel}>{d?.xg ? 'xG' : 'xG / match'}</Text>
+                <Text style={s.statNum}>{xg[1]}</Text>
               </View>
             </View>
-          ) : (
-            <Notice text={`Expected goals (xG) is not available for ${comp.name}. We hide it rather than show zero.`} />
-          )}
-          <Text style={s.meta}>Sample values until a stats provider is connected.</Text>
+          ) : m.status !== 'upcoming' || !comp.xg ? (
+            <Notice text={`Expected goals (xG) is not available for this match. We hide it rather than show zero.`} />
+          ) : null}
+          {sample ? <Text style={s.meta}>Sample values until a stats provider is connected.</Text> : null}
         </View>
       ) : null}
 
@@ -385,6 +420,14 @@ function MatchDetail({ m }: { m: Match }) {
                   return { title: `${team(id).name} · ${compOf(teamComp(id)).name}`, rows: all.slice(from, from + 5), all };
                 });
             const posOf = (id: string, all: StandingRow[]) => all.findIndex((r) => r.id === id) + 1;
+            if (!pair.every((id) => tables.some((x) => x.all.some((r) => r.id === id)))) {
+              return (
+                <Notice
+                  icon="table-chart"
+                  text="No league table for these teams yet. Current-season tables need a paid API-Football plan."
+                />
+              );
+            }
             return (
               <>
                 <View style={s.metrics}>
@@ -407,7 +450,9 @@ function MatchDetail({ m }: { m: Match }) {
                     <StandingsTable rows={t.rows.map((r) => ({ r, pos: posOf(r.id, t.all) }))} highlight={(id) => pair.includes(id)} />
                   </View>
                 ))}
-                <Text style={[s.meta, { marginTop: 10 }]}>Both teams highlighted. Tap a team for its stats. Sample table.</Text>
+                <Text style={[s.meta, { marginTop: 10 }]}>
+                  Both teams highlighted. Tap a team for its stats.{sample ? ' Sample table.' : ''}
+                </Text>
               </>
             );
           })()
@@ -422,43 +467,67 @@ function MatchDetail({ m }: { m: Match }) {
                 <Text style={s.listTitle}>{team(id).name} · last 5</Text>
               </View>
               <View style={s.formRow}>
+                {!team(id).form.length ? (
+                  <Text style={s.meta}>{detailState === 'loading' ? 'Loading form…' : 'No recent form yet.'}</Text>
+                ) : null}
                 {team(id).form.map((r, i) => (
                   <View key={i} style={s.formItem}>
                     <FormChip r={r} />
-                    <Text style={s.formDate}>{dateFor(-7 * (5 - i)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</Text>
-                    <Text style={s.formDate}>{formVenue(id, i)}</Text>
+                    {sample ? (
+                      <>
+                        <Text style={s.formDate}>
+                          {dateFor(-7 * (5 - i)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </Text>
+                        <Text style={s.formDate}>{formVenue(id, i)}</Text>
+                      </>
+                    ) : d?.formVenues?.[id]?.[i] ? (
+                      <Text style={s.formDate}>{d.formVenues[id][i]}</Text>
+                    ) : null}
                   </View>
                 ))}
               </View>
             </View>
           ))}
-          <View style={s.panel}>
-            <Text style={s.eyebrow}>Head to head · last 6 meetings · 2022–2026</Text>
-            <View style={s.h2h}>
-              {[
-                [H.short, h2h[0]],
-                ['Draws', h2h[1]],
-                [A.short, h2h[2]],
-              ].map(([k, v]) => (
-                <View key={k as string} style={s.h2hItem}>
-                  <Text style={s.h2hValue}>{v}</Text>
-                  <Text style={s.listSub}>{k}</Text>
-                </View>
-              ))}
+          {h2hData ? (
+            <View style={s.panel}>
+              <Text style={s.eyebrow}>
+                Head to head · last {h2hData.games} meeting{h2hData.games === 1 ? '' : 's'}
+                {h2hData.fromYear
+                  ? ` · ${h2hData.fromYear === h2hData.toYear ? h2hData.fromYear : `${h2hData.fromYear}–${h2hData.toYear}`}`
+                  : ''}
+              </Text>
+              <View style={s.h2h}>
+                {[
+                  [H.short, h2hData.home],
+                  ['Draws', h2hData.draws],
+                  [A.short, h2hData.away],
+                ].map(([k, v]) => (
+                  <View key={k as string} style={s.h2hItem}>
+                    <Text style={s.h2hValue}>{v}</Text>
+                    <Text style={s.listSub}>{k}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={s.meta}>A sample of {h2hData.games} is small. Treat head-to-head as context, not evidence.</Text>
             </View>
-            <Text style={s.meta}>A sample of 6 is small. Treat head-to-head as context, not evidence.</Text>
-          </View>
+          ) : (
+            <Notice text={detailState === 'loading' ? 'Loading head to head…' : 'No previous meetings found.'} />
+          )}
         </>
       ) : null}
 
-      {detailTab === 'Lineups' ? (
+      {detailTab === 'Lineups' && d?.lineups?.length ? (
+        d.lineups.map((l) => <LineupPanel key={l.team} lineup={l} />)
+      ) : detailTab === 'Lineups' ? (
         <Notice
           icon="groups"
           text={
             comp.lineups
               ? m.status === 'upcoming'
                 ? 'Confirmed lineups usually appear about an hour before kick-off.'
-                : 'Lineups will appear here when the data source is connected.'
+                : sample
+                  ? 'Lineups will appear here when the data source is connected.'
+                  : 'No lineups for this match.'
               : `Lineups are not available for ${comp.name}.`
           }
         />
@@ -469,5 +538,69 @@ function MatchDetail({ m }: { m: Match }) {
         text="This estimate expresses uncertainty. It is not a guarantee, a betting instruction or a promise of profit."
       />
     </>
+  );
+}
+
+function EventsPanel({ events, homeId }: { events: MatchEvent[]; homeId: string }) {
+  const icon = (e: MatchEvent) =>
+    e.kind === 'goal'
+      ? '⚽'
+      : e.kind === 'card'
+        ? /red/i.test(e.detail)
+          ? '🟥'
+          : '🟨'
+        : e.kind === 'subst'
+          ? '⇄'
+          : e.kind === 'var'
+            ? 'VAR'
+            : '•';
+  return (
+    <View style={s.panel}>
+      <Text style={s.eyebrow}>Match events</Text>
+      {events.map((e, i) => {
+        const home = e.team === homeId;
+        const text =
+          e.kind === 'subst'
+            ? `${e.assist ?? ''} on, ${e.player} off`
+            : `${e.player}${e.kind === 'goal' && e.assist ? ` (${e.assist})` : ''}`;
+        return (
+          <View key={i} style={[s.evidenceRow, { flexDirection: home ? 'row' : 'row-reverse' }]}>
+            <Text style={[s.listSub, { width: 44, textAlign: home ? 'left' : 'right' }]}>
+              {e.minute}
+              {e.extra ? `+${e.extra}` : ''}′
+            </Text>
+            <Text style={[s.evidenceValue, { flex: 1, textAlign: home ? 'left' : 'right' }]} numberOfLines={2}>
+              {icon(e)} {text}
+              {e.kind === 'goal' && e.detail !== 'Normal Goal' ? ` · ${e.detail}` : ''}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function LineupPanel({ lineup }: { lineup: Lineup }) {
+  const { team } = useData();
+  return (
+    <View style={s.panel}>
+      <View style={s.teamLine}>
+        <Crest id={lineup.team} size={22} />
+        <Text style={s.listTitle}>
+          {team(lineup.team).name}
+          {lineup.formation ? ` · ${lineup.formation}` : ''}
+        </Text>
+      </View>
+      {lineup.startXI.map((p, i) => (
+        <View key={`xi${i}`} style={s.evidenceRow}>
+          <Text style={s.listSub}>
+            {p.number ?? ''} {p.name}
+          </Text>
+          <Text style={s.evidenceValue}>{p.pos ?? ''}</Text>
+        </View>
+      ))}
+      {lineup.subs.length ? <Text style={[s.meta, { marginTop: 8 }]}>Subs: {lineup.subs.map((p) => p.name).join(', ')}</Text> : null}
+      {lineup.coach ? <Text style={s.meta}>Coach: {lineup.coach}</Text> : null}
+    </View>
   );
 }

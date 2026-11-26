@@ -44,3 +44,6 @@ yarn-error.*
 .env
 .env.*
 !.env.example
+
+# API-Football dev proxy cache
+server/.cache/
