@@ -73,8 +73,8 @@ export function MatchCard({ m, showDay }: { m: Match; showDay?: boolean }) {
             </Glass>
           ) : (
             <>
-              <Text style={s.probValue}>{m.pick.p}%</Text>
-              <Text style={s.probCaption}>estimate</Text>
+              <Text style={s.probValue}>{m.estimate === 'pending' ? '…' : `${m.pick.p}%`}</Text>
+              <Text style={s.probCaption}>{m.estimate === 'pending' ? 'loading' : 'estimate'}</Text>
             </>
           )}
         </View>

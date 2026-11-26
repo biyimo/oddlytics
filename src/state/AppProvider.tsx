@@ -7,6 +7,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { router } from 'expo-router';
 import type { TextInput } from 'react-native';
 type TextInputRef = React.ComponentRef<typeof TextInput>;
+import { isSampleData } from '../services/api';
 import { load, save } from '../services/storage';
 import { signOut as authSignOut } from '../services/auth';
 import type { CompId, CompTab, Filters, InfoPage, Match, SheetName, TeamId, User } from '../types';
@@ -69,7 +70,8 @@ function useAppState() {
   const [hydrated, setHydrated] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [followTeams, setFollowTeams] = useState<TeamId[]>([]);
-  const [followComps, setFollowComps] = useState<CompId[]>(['npfl', 'epl']);
+  /* Default follows: NPFL and Premier League (sample ids, then API-Football league ids). */
+  const [followComps, setFollowComps] = useState<CompId[]>(isSampleData() ? ['npfl', 'epl'] : ['399', '39']);
   const [notify, setNotify] = useState(true);
   const [reminders, setReminders] = useState(true);
   const [user, setUser] = useState<User | null>(null);

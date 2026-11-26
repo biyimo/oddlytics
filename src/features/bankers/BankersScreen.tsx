@@ -70,17 +70,17 @@ function FeatureCard({ m, rank }: { m: Match; rank: number }) {
 
 function Picks() {
   const { day, bankersFocus, followComps, followTeams, isPlus, setFavSegment, goTab, openRecord, openPremium } = useApp();
-  const { matches } = useData();
+  const { matches, comp } = useData();
   const dayMatches = matches.filter((m) => m.day === day);
   const bankersList = dayMatches.filter((m) =>
     bankersFocus === 'All'
       ? true
       : bankersFocus === 'Nigeria'
-        ? m.comp === 'npfl'
+        ? comp(m.comp).country === 'Nigeria'
         : followComps.includes(m.comp) || followTeams.includes(m.home) || followTeams.includes(m.away),
   );
   const topPicks = [...bankersList]
-    .filter((m) => m.pick.p >= 55)
+    .filter((m) => m.estimate !== 'pending' && m.pick.p >= 55)
     .sort((a, b) => b.pick.p - a.pick.p)
     .slice(0, 10);
   const freeCount = dayMatches.filter((m) => !m.premium).length;

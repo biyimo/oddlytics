@@ -66,7 +66,58 @@ src/
   types/                Data shapes the UI expects
 ```
 
-## Connecting a real backend
+## Real football data (API-Football)
+
+The app can load real fixtures, predictions, odds, lineups, events and match stats from
+[API-Football](https://www.api-football.com/) (v3.football.api-sports.io). Code: `src/services/apiFootball/`.
+
+**The API key never goes in the app.** Anything built into an app can be pulled out of it, and a leaked key
+lets anyone use up your daily requests. So the app talks to a small proxy that adds the key on the server:
+
+```
+phone app  ->  proxy (holds the key, caches answers)  ->  API-Football
+```
+
+### Run it on your computer (development)
+
+1. Copy `.env.example` to `.env` and set `APIFOOTBALL_KEY=` to your key (no `EXPO_PUBLIC_` prefix, so Expo never bundles it).
+2. `npm run proxy`. It prints a line like `EXPO_PUBLIC_FOOTBALL_PROXY_URL=http://192.168.1.20:8787`.
+3. Put that line in `.env` (use `http://localhost:8787` for the web build), then restart `npx expo start -c`.
+
+Your phone and computer must be on the same Wi-Fi. The proxy caches to `server/.cache/` so restarts don't spend requests.
+
+### For the store release (Supabase)
+
+The same proxy as a Supabase Edge Function, with the cache in a database table so every user shares it:
+
+```
+supabase secrets set APIFOOTBALL_KEY=<your key>
+supabase db push                        # creates api_football_cache
+supabase functions deploy football
+```
+
+Then set `EXPO_PUBLIC_FOOTBALL_PROXY_URL=https://<project-ref>.supabase.co/functions/v1/football` and
+`EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key>` (the anon key is public by design).
+
+### What the free plan allows (checked 26 Nov 2026)
+
+- 100 requests a day, 10 a minute.
+- Fixtures only for yesterday, today and tomorrow (`EXPO_PUBLIC_FOOTBALL_DAY_RANGE=1`). Other days come back empty.
+- No league tables for the current season. The app hides the table and stops asking for 12 hours.
+- Predictions, odds, lineups, events and match stats all work.
+
+How the app stays inside 100 a day: every answer is cached on the phone and in the proxy (today's fixtures 20 min,
+other days 3 to 24 h, predictions 12 h, odds 3 h, finished matches 7 days). About 20 predictions load in the
+background per start (`EXPO_PUBLIC_FOOTBALL_PREFETCH_PREDICTIONS`); the rest load when a match is opened. Live
+scores every minute, more days, league tables and "every league" (`EXPO_PUBLIC_FOOTBALL_LEAGUES=all`) need a paid plan.
+
+How picks are made: API-Football gives home/draw/away percentages and an advice line. Goal markets (O/U, BTTS, team
+goals) come from a Poisson model on both teams' season scoring. The pick is the provider's advice when it has 55%+,
+otherwise the likeliest market under 88%. See `src/services/apiFootball/model.ts`.
+
+If the proxy can't be reached on first load, the app falls back to the sample data (Account shows which is in use).
+
+## Connecting your own backend
 
 All data goes through one interface, `OddlyticsApi` in `src/services/api.ts`:
 
@@ -81,9 +132,9 @@ getStandings(compId): Promise<StandingRow[]>
 2. Make your server return the shapes in `src/types/index.ts` from the endpoints listed in `src/services/httpApi.ts`, or edit `httpApi.ts` to map your provider's format.
 3. Restart `npx expo start`. When the variable is set, the app stops using sample data.
 
-Still sample-only, and where to replace it:
+Still sample-only (with either source), and where to replace it:
 
-- Season stats, head-to-head and xG on match, team and league pages: `src/data/sample/insights.ts`.
+- Team and league page season stats: `src/data/sample/insights.ts` (match pages use API-Football when it's connected).
 - Track record figures: `src/data/sample/trackRecord.ts`.
 - Sign in / register: `src/services/auth.ts` (swap in Firebase Auth, Supabase, Auth0 or your own API; keep the function signatures).
 - Plus purchases: the button in `src/features/premium/PremiumScreen.tsx` (use App Store / Google Play billing, for example RevenueCat).

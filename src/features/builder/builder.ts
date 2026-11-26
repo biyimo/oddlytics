@@ -12,6 +12,7 @@ export function builderPool(matches: Match[], b: BuilderSettings, locked: (m: Ma
         m.status !== 'finished' &&
         !locked(m) &&
         (b.type === 'All' || (b.type === 'Featured' ? m.featured : m.status === 'live')) &&
+        m.estimate !== 'pending' &&
         m.pick.p >= b.minP &&
         oddsFor(m) >= b.minOdd &&
         oddsFor(m) <= b.maxOdd,
